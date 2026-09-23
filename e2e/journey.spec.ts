@@ -22,7 +22,9 @@ function uniqueEmail(prefix: string): string {
 const PASSWORD = 'flowforge-test-1';
 
 test.describe('new user journey', () => {
-  test('register, build a workspace, generate, edit, run and track a workflow', async ({ page }) => {
+  test('register, build a workspace, generate, edit, run and track a workflow', async ({
+    page,
+  }) => {
     const email = uniqueEmail('e2e');
 
     // ---------------------------------------------------------- register
@@ -48,7 +50,11 @@ test.describe('new user journey', () => {
 
     // ------------------------------------------------- AI generation
     await page.goto('/dashboard/workflows');
-    await expect(page.getByRole('heading', { name: 'Workflows' })).toBeVisible();
+    // Exact match on purpose: the empty state renders an "No workflows yet"
+    // heading, which a substring match on 'Workflows' also resolves to. Which
+    // one is on screen depends on how fast the first query settles, so a loose
+    // match makes this assertion flaky rather than wrong.
+    await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Generate with AI' }).first().click();
 
