@@ -300,22 +300,22 @@ export async function getAnalyticsOverview(
   };
 }
 
-/** Recent workspace activity, joined with actor names for display. */
+/** One row of the workspace activity feed, with the actor resolved for display. */
+export type ActivityFeedItem = {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  actor: { id: string; name: string; avatar: string | null };
+};
+
 export async function getActivityFeed(
   userId: string,
   workspaceId: string,
   limit = 25,
-): Promise<
-  Array<{
-    id: string;
-    action: string;
-    entityType: string;
-    entityId: string | null;
-    metadata: Record<string, unknown>;
-    createdAt: string;
-    actor: { id: string; name: string; avatar: string | null };
-  }>
-> {
+): Promise<ActivityFeedItem[]> {
   await requirePermission(userId, workspaceId, 'workspace:read');
 
   const activities = await Activity.find({ workspaceId: new Types.ObjectId(workspaceId) })
