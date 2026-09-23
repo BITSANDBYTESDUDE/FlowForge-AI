@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { enforceRateLimit, type RateLimitBucket } from '@/lib/rate-limit';
 import { requireSession, type ActiveSession } from '@/lib/auth/session';
 import { ValidationError } from '@/lib/utils/errors';
-import type { ZodType } from 'zod';
+import type { z, ZodTypeAny } from 'zod';
 
 /**
  * Best-effort client address.
@@ -30,8 +30,18 @@ export function hashIdentifier(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 24);
 }
 
-/** Parses and validates a JSON request body, converting failures to 400s. */
-export async function parseJsonBody<T>(request: NextRequest, schema: ZodType<T>): Promise<T> {
+/**
+ * Parses and validates a JSON request body, converting failures to 400s.
+ *
+ * The generic is bound to the schema itself and the return type derived via
+ * `z.output`, so callers get the *parsed* type. Typing it as `ZodType<T>` would
+ * unify input and output, and TypeScript resolves that to the input type — which
+ * makes fields with Zod `.default()` look optional at every call site.
+ */
+export async function parseJsonBody<TSchema extends ZodTypeAny>(
+  request: NextRequest,
+  schema: TSchema,
+): Promise<z.output<TSchema>> {
   let raw: unknown;
   try {
     raw = await request.json();
@@ -48,7 +58,7 @@ export async function parseJsonBody<T>(request: NextRequest, schema: ZodType<T>)
       })),
     });
   }
-  return parsed.data;
+  return parsed.data as z.output<TSchema>;
 }
 
 /**

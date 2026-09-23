@@ -169,6 +169,9 @@ export const createWorkflowSchema = z.object({
 
 export const updateWorkflowSchema = z
   .object({
+    // Scopes the update to a workspace so the route never has to trust a path id
+    // alone; the service re-checks membership against this value.
+    workspaceId: objectIdSchema,
     name: z.string().min(1).max(160).optional(),
     description: z.string().max(2000).nullish(),
     status: z.enum(WORKFLOW_STATUSES).optional(),
@@ -176,9 +179,10 @@ export const updateWorkflowSchema = z
     graph: workflowGraphSchema.optional(),
     changeSummary: z.string().max(500).optional(),
   })
-  .refine((value) => Object.keys(value).length > 0, {
-    message: 'Provide at least one field to update',
-  });
+  .refine(
+    (value) => Object.keys(value).some((key) => key !== 'workspaceId'),
+    { message: 'Provide at least one field to update' },
+  );
 
 export const listWorkflowsQuerySchema = z.object({
   workspaceId: objectIdSchema,
