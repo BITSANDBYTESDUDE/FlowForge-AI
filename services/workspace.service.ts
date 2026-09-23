@@ -5,7 +5,7 @@ import { canAssignRole, canRemoveMember, roleAtLeast } from '@/lib/permissions';
 import { assertObjectId, listUserWorkspaceIds, requirePermission } from '@/lib/permissions/guard';
 import { recordActivity } from '@/lib/notifications';
 import { recordAudit } from '@/lib/audit';
-import { slugify } from '@/lib/utils/id';
+import { slugify } from '@/lib/utils/slugify';
 import type { CreateWorkspaceInput, InviteMemberInput, UpdateWorkspaceInput } from '@/schemas/workspace.schema';
 import type { MembershipSummary, WorkspaceDetail, WorkspaceRole, WorkspaceSummary } from '@/types/workspace';
 

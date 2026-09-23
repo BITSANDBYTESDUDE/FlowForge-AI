@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
+/**
+ * Server-only identifier helpers.
+ *
+ * `node:crypto` cannot be bundled for the browser, so anything a client
+ * component needs (see `lib/utils/slugify.ts`) lives in its own module rather
+ * than here.
+ */
+
 /** Generates a stable, URL-safe identifier for graph nodes and edges. */
 export function createNodeId(): string {
   return `node-${randomUUID()}`;
@@ -7,15 +15,4 @@ export function createNodeId(): string {
 
 export function createEdgeId(): string {
   return `edge-${randomUUID()}`;
-}
-
-/** Generates a lowercase URL slug from arbitrary text. */
-export function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60);
 }
