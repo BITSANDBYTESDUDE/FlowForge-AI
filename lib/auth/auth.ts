@@ -3,6 +3,7 @@ import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { nextCookies } from 'better-auth/next-js';
 import { getEnv } from '@/lib/env';
 import { getMongoDb } from '@/lib/db/connect';
+import { getAuthRateLimitConfig } from '@/lib/rate-limit';
 import { sendEmail } from '@/lib/notifications';
 import { logger } from '@/lib/utils/logger';
 
@@ -102,6 +103,13 @@ function buildOptions(withNextCookies: boolean): BetterAuthOptions {
         path: '/',
       },
     },
+    /**
+     * Better Auth throttles its own endpoints. The values come from the
+     * `RATE_LIMIT_AUTH_*` variables rather than the library defaults, so the
+     * documented limits are the ones actually enforced — see
+     * `getAuthRateLimitConfig` for why the defaults are not usable.
+     */
+    rateLimit: getAuthRateLimitConfig(),
     // Must be last when present: it writes session cookies through Next's
     // cookie store, which route handlers and server actions require.
     plugins: withNextCookies ? [nextCookies()] : [],

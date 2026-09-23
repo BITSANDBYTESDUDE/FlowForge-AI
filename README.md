@@ -427,10 +427,22 @@ call.
 from Mongoose casting and explicit schema validation rather than string-built
 queries.
 
-**Rate limiting** — a bucket abstraction (`ai`, `auth`, `api`) with Upstash Redis
-behind it and an in-memory fallback. `/api/ai/*` is limited tightly because each
-call costs money; `/api/auth/*` is limited to blunt credential stuffing. All
-limits and windows are configurable through environment variables.
+**Rate limiting** — two layers, both configurable through environment variables.
+
+Application routes use a bucket abstraction (`ai`, `auth`, `api`) backed by
+Upstash Redis with an in-memory fallback, charged against the authenticated user
+id in `requireApiSession`. `/api/ai/*` is limited tightly because each call costs
+money.
+
+Better Auth's own endpoints (`/api/auth/*`, notably sign-in and sign-up) are
+throttled by the library's limiter, configured in `getAuthRateLimitConfig` from
+the `RATE_LIMIT_AUTH_*` variables and applied in every environment. Limits are
+two-tier: the credential paths get the tight `auth` budget, while other auth
+paths — including `/get-session`, which runs on every page load — fall back to
+the generous `api` budget. Throttling a session read by the credential budget
+would lock a user out after ten navigations. The library's defaults are not
+used: they are disabled outside production and would otherwise impose a
+hard-coded 3 requests / 10s on sign-in that ignores the configured limits.
 
 **Error handling** — one response envelope, and internal failures never reach the
 client:
@@ -490,6 +502,21 @@ and server logs. The submit control is disabled until hydration completes.
 **Workflow definitions and executions are separate collections.** The same
 workflow has to run for Client A and Client B without their state colliding, and
 without cloning the definition for each run.
+
+**Better Auth's rate limiter is configured, not left at its defaults.** The
+library throttles its own endpoints, but an unconfigured limiter is wrong in both
+environments: it is disabled outside production, and where it is enabled it
+hard-codes 3 requests / 10s on `/sign-in` — oblivious to `RATE_LIMIT_AUTH_*`.
+Configuring `rateLimit.customRules` makes our documented variables the single
+source of truth and applies them everywhere.
+
+The limits are deliberately two-tier rather than one number for all of
+`/api/auth/*`. Credential endpoints need a tight budget, but they share a router
+with `/get-session`, which every page load calls. A single auth-wide budget of 10
+per minute means ten navigations and the app has locked the user out — a failure
+that only shows up under real browsing, not in a test that signs in once. The
+default therefore uses the generous `api` budget and `customRules` narrow the
+credential paths.
 
 **Integration tests run serially.** They share one MongoDB database. Parallel
 files were truncating each other's collections, producing failures that looked

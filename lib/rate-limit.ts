@@ -27,7 +27,10 @@ export function getBucketConfig(bucket: RateLimitBucket): BucketConfig {
         windowSeconds: env.RATE_LIMIT_AUTH_WINDOW_SECONDS,
       };
     case 'api':
-      return { limit: env.RATE_LIMIT_API_REQUESTS, windowSeconds: env.RATE_LIMIT_API_WINDOW_SECONDS };
+      return {
+        limit: env.RATE_LIMIT_API_REQUESTS,
+        windowSeconds: env.RATE_LIMIT_API_WINDOW_SECONDS,
+      };
   }
 }
 
@@ -112,7 +115,12 @@ function memoryLimit(key: string, config: BucketConfig): RateLimitResult {
 
   existing.count += 1;
   const remaining = Math.max(0, config.limit - existing.count);
-  return { success: existing.count <= config.limit, limit: config.limit, remaining, resetAt: existing.resetAt };
+  return {
+    success: existing.count <= config.limit,
+    limit: config.limit,
+    remaining,
+    resetAt: existing.resetAt,
+  };
 }
 
 /* ------------------------------------------------------------------- Public */
@@ -166,4 +174,99 @@ export async function enforceRateLimit(
 export function resetRateLimits(): void {
   memoryWindows.clear();
   warnedAboutFallback = false;
+}
+
+/* --------------------------------------------------- Better Auth endpoints */
+
+/**
+ * Paths on Better Auth's router that deserve a tighter limit.
+ *
+ * These are the endpoints where a wrong guess costs something: credential
+ * submission, account creation, and the password/email change paths. Reads like
+ * `/get-session` are deliberately absent — that endpoint runs on every page load,
+ * and throttling it would lock a user out of the app for simply navigating. A
+ * `*` does not cross a `/`, so `/sign-in/*` covers the sign-in sub-routes only.
+ */
+const CREDENTIAL_PATHS = [
+  '/sign-in/*',
+  '/sign-up/*',
+  '/forget-password',
+  '/reset-password',
+  '/change-password',
+  '/change-email',
+] as const;
+
+export type BetterAuthRateLimitConfig = {
+  enabled: boolean;
+  window: number;
+  max: number;
+  customRules: Record<string, { window: number; max: number }>;
+  customStorage?: {
+    get: (key: string) => Promise<{ key: string; count: number; lastRequest: number } | undefined>;
+    set: (key: string, value: { key: string; count: number; lastRequest: number }) => Promise<void>;
+  };
+};
+
+/** Shape Better Auth persists for a single rate-limit window. */
+type RateLimitWindow = { key: string; count: number; lastRequest: number };
+
+/** Redis-backed window store, so the limit is shared across instances. */
+function getRateLimitStorage(): BetterAuthRateLimitConfig['customStorage'] {
+  if (!hasRedis()) return undefined;
+
+  const env = getEnv();
+  const redis = new Redis({
+    url: env.UPSTASH_REDIS_REST_URL!,
+    token: env.UPSTASH_REDIS_REST_TOKEN!,
+  });
+
+  return {
+    get: async (key) => (await redis.get<RateLimitWindow>(key)) ?? undefined,
+    set: async (key, value) => {
+      // TTL matches the widest window we configure; the record also carries its
+      // own lastRequest, and a stale entry is overwritten on first sight.
+      await redis.set(key, value, { ex: env.RATE_LIMIT_AUTH_WINDOW_SECONDS * 2 });
+    },
+  };
+}
+
+/**
+ * Rate limiting for Better Auth's own endpoints.
+ *
+ * Better Auth ships a limiter, but leaving it unconfigured is wrong in both
+ * environments: it is disabled outside production, and where it is enabled it
+ * applies a hard-coded 3 requests / 10s to `/sign-in` that ignores our
+ * `RATE_LIMIT_AUTH_*` variables entirely.
+ *
+ * Two tiers, because treating every auth path alike breaks the app in opposite
+ * directions. Sign-in and sign-up need a tight budget — that is where credentials
+ * are guessed. Reads like `/get-session` fire on every page load, so applying the
+ * credential budget there locks a user out after ten navigations. The default
+ * therefore uses the (generous) `api` bucket, and `customRules` narrow the
+ * credential paths to the `auth` bucket. `customRules` replace the library
+ * defaults for the paths they name, which is what lets these values win.
+ */
+export function getAuthRateLimitConfig(): BetterAuthRateLimitConfig {
+  const credential = {
+    window: getBucketConfig('auth').windowSeconds,
+    max: getBucketConfig('auth').limit,
+  };
+  const general = {
+    window: getBucketConfig('api').windowSeconds,
+    max: getBucketConfig('api').limit,
+  };
+
+  const customRules = Object.fromEntries(
+    CREDENTIAL_PATHS.map((path) => [path, credential]),
+  ) as Record<string, { window: number; max: number }>;
+
+  const customStorage = getRateLimitStorage();
+
+  return {
+    enabled: true,
+    window: general.window,
+    max: general.max,
+    customRules,
+    ...(customStorage ? { customStorage } : {}),
+  };
 }
