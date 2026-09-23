@@ -50,6 +50,10 @@ export function WorkspaceSettings() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>('MEMBER');
   const [pendingRemove, setPendingRemove] = useState<{ id: string; name: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ kind: 'workspace'; id: string; name: string } | null>(
+    null,
+  );
+  const [confirmName, setConfirmName] = useState('');
 
   useEffect(() => {
     if (activeWorkspace) setName(activeWorkspace.name);
@@ -118,6 +122,21 @@ export function WorkspaceSettings() {
       toast.error(error.message);
       setPendingRemove(null);
     },
+  });
+
+  const deleteWorkspace = useMutation({
+    mutationFn: (id: string) => workspacesApi.remove(id),
+    onSuccess: () => {
+      toast.success('Workspace deleted');
+      setPendingDelete(null);
+      setConfirmName('');
+      // The deleted workspace may have been the active one, so the workspace
+      // list (and the selection derived from it) must be refetched before we
+      // navigate away from a page that no longer has a valid workspace.
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+      window.location.href = '/dashboard';
+    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   if (workspaceLoading || !activeWorkspace) {
@@ -412,46 +431,98 @@ export function WorkspaceSettings() {
             <Button
               variant="outline"
               className="text-destructive hover:text-destructive"
-              disabled
-              title="Workspace deletion is not available yet"
+              onClick={() =>
+                setPendingDelete({
+                  kind: 'workspace',
+                  id: activeWorkspace.id,
+                  name: activeWorkspace.name,
+                })
+              }
             >
               Delete this workspace
             </Button>
             <p className="mt-2 text-xs text-muted-foreground">
-              Deletion is deliberately disabled: the API route is not exposed yet, so the button
-              would be a fake action.
+              You will be asked to type the workspace name to confirm. Audit records are retained
+              after deletion; everything else is removed.
             </p>
           </CardContent>
         </Card>
       ) : null}
 
       <AlertDialog
-        open={Boolean(pendingRemove)}
+        open={Boolean(pendingRemove) || Boolean(pendingDelete)}
         onOpenChange={(open) => {
-          if (!open) setPendingRemove(null);
+          if (!open) {
+            setPendingRemove(null);
+            setPendingDelete(null);
+            setConfirmName('');
+          }
         }}
       >
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove {pendingRemove?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              They lose access to this workspace immediately. Their account and any work they
-              authored are not affected.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={removeMember.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={(event) => {
-                event.preventDefault();
-                if (pendingRemove) removeMember.mutate(pendingRemove.id);
-              }}
-              disabled={removeMember.isPending}
-            >
-              {removeMember.isPending ? 'Removing…' : 'Remove member'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          {pendingDelete ? (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete “{pendingDelete.name}” permanently?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This removes every workflow, task, execution, version, notification and membership
+                  in this workspace. Audit records are retained. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+
+              {/* Typing the name is the guard against a reflexive click on a
+                  destructive action that wipes an entire workspace. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="confirm-workspace-name">
+                  Type <span className="font-mono font-medium">{pendingDelete.name}</span> to confirm
+                </Label>
+                <Input
+                  id="confirm-workspace-name"
+                  value={confirmName}
+                  onChange={(event) => setConfirmName(event.target.value)}
+                  autoComplete="off"
+                  placeholder={pendingDelete.name}
+                />
+              </div>
+
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleteWorkspace.isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (pendingDelete) deleteWorkspace.mutate(pendingDelete.id);
+                  }}
+                  disabled={deleteWorkspace.isPending || confirmName !== pendingDelete.name}
+                >
+                  {deleteWorkspace.isPending ? 'Deleting…' : 'Delete workspace'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          ) : (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove {pendingRemove?.name}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  They lose access to this workspace immediately. Their account and any work they
+                  authored are not affected.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={removeMember.isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (pendingRemove) removeMember.mutate(pendingRemove.id);
+                  }}
+                  disabled={removeMember.isPending}
+                >
+                  {removeMember.isPending ? 'Removing…' : 'Remove member'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
         </AlertDialogContent>
       </AlertDialog>
     </div>
