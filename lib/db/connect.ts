@@ -74,7 +74,50 @@ export function isDatabaseConnected(): boolean {
   return cache.conn !== null && mongoose.connection.readyState === 1;
 }
 
-/** Used by the health endpoint and test teardown. */
+/**
+ * Ensures every registered model's declared indexes exist on the server.
+ *
+ * Mongoose builds indexes in the background after the first model use, so a
+ * short-lived process that writes data and exits immediately (the seed script,
+ * a migration) can finish with **no** indexes created — queries then fall back to
+ * collection scans and the unique constraints that protect `User.email` and
+ * `Workspace.slug` are not enforced at all.
+ *
+ * `syncIndexes` both creates missing indexes and drops ones no longer declared,
+ * so it is the right tool for an explicit operator-run task. Callers should
+ * await this before disconnecting.
+ */
+export async function ensureIndexes(): Promise<void> {
+  const results = await Promise.all(
+    Object.values(mongoose.models).map(async (model) => {
+      try {
+        const dropped = await model.syncIndexes();
+        return { model: model.modelName, dropped: dropped.length, error: null as string | null };
+      } catch (error) {
+        // One model failing must not stop the others; report and continue.
+        return {
+          model: model.modelName,
+          dropped: 0,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }),
+  );
+
+  for (const result of results) {
+    if (result.error) {
+      logger.warn(`Index sync failed for ${result.model}: ${result.error}`);
+    } else {
+      logger.info(`Indexes synced for ${result.model}`);
+    }
+  }
+
+  const failures = results.filter((r) => r.error);
+  if (failures.length > 0) {
+    throw new Error(`Index sync failed for ${failures.length} model(s)`);
+  }
+}
+
 export async function disconnectFromDatabase(): Promise<void> {
   if (cache.conn) {
     await mongoose.disconnect();

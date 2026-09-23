@@ -13,6 +13,7 @@ import type { Paginated } from '@/lib/utils/pagination';
 import type {
   ActivityFeedItem,
   AnalyticsOverview,
+  AuditLogEntry,
   DashboardMetrics,
   NotificationItem,
   SearchResponse,
@@ -235,6 +236,24 @@ export const analyticsApi = {
     api.get<{ metrics: DashboardMetrics }>('/api/analytics', {
       params: { workspaceId, scope: 'metrics' },
     }),
+};
+
+/* ------------------------------------------------------------------- audit */
+
+export type AuditListParams = {
+  workspaceId: string;
+  action?: string;
+  actorId?: string;
+  entityType?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+};
+
+export const auditApi = {
+  list: (params: AuditListParams) =>
+    api.get<Paginated<AuditLogEntry>>('/api/audit', { params }),
 };
 
 /* -------------------------------------------------------------- notification */

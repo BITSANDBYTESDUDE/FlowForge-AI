@@ -64,11 +64,15 @@ describe('roleHasPermission', () => {
   it('never grants a permission to a lower role but not a higher one', () => {
     // A monotonic hierarchy: if a role can do something, every more privileged
     // role must also be able to. A violation here means the matrix has a hole.
-    const ordered: WorkspaceRole[] = ['VIEWER', 'MEMBER', 'ADMIN', 'OWNER'];
+    // Adjacent pairs stated explicitly: `ordered[index]` is `T | undefined`
+    // under noUncheckedIndexedAccess, and asserting it away would be noise.
+    const adjacentPairs: Array<[WorkspaceRole, WorkspaceRole]> = [
+      ['VIEWER', 'MEMBER'],
+      ['MEMBER', 'ADMIN'],
+      ['ADMIN', 'OWNER'],
+    ];
 
-    for (let index = 0; index < ordered.length - 1; index += 1) {
-      const lower = ordered[index];
-      const higher = ordered[index + 1];
+    for (const [lower, higher] of adjacentPairs) {
 
       for (const permission of [
         'workspace:read',

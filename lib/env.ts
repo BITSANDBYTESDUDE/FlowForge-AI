@@ -18,6 +18,17 @@ const serverSchema = z.object({
   OPENAI_API_KEY: z.string().min(1).optional(),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
   OPENAI_BASE_URL: z.string().url().optional(),
+  /**
+   * Development escape hatch: when OpenAI is not configured, the AI endpoints
+   * fall back to a deterministic local generator instead of failing. Off unless
+   * explicitly enabled, and it can only ever apply while no API key is present —
+   * a configured key always takes precedence, so this can never mask a real
+   * provider outage or silently substitute output in production.
+   */
+  AI_ALLOW_HEURISTIC_FALLBACK: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
 
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),

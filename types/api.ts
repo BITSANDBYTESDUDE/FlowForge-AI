@@ -21,6 +21,7 @@ import type {
   TemplateSummary as ServiceTemplateSummary,
 } from '@/services/template.service';
 import type { NotificationItem } from '@/services/notification.service';
+import type { AuditLogEntry } from '@/services/audit.service';
 
 export type {
   ActivityFeedItem,
@@ -31,6 +32,7 @@ export type {
   SearchResult,
   SearchResultType,
   NotificationItem,
+  AuditLogEntry,
 };
 
 export type TemplateSummary = ServiceTemplateSummary;
