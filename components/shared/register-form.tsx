@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useIsHydrated } from '@/lib/hooks/use-is-hydrated';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AlertCircle } from 'lucide-react';
@@ -22,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 export function RegisterForm() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const hydrated = useIsHydrated();
   const [formError, setFormError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [values, setValues] = useState({
@@ -177,7 +179,7 @@ export function RegisterForm() {
             ) : null}
           </div>
 
-          <Button type="submit" className="w-full" loading={pending}>
+          <Button type="submit" className="w-full" loading={pending} disabled={!hydrated}>
             {pending ? 'Creating account…' : 'Create account'}
           </Button>
 

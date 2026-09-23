@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useIsHydrated } from '@/lib/hooks/use-is-hydrated';
 import Link from 'next/link';
 import { ArrowLeft, Mail } from 'lucide-react';
 import { forgetPassword } from '@/lib/auth/client';
@@ -22,6 +23,7 @@ export function ForgotPasswordForm() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const hydrated = useIsHydrated();
   const [sent, setSent] = useState(false);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -119,7 +121,7 @@ export function ForgotPasswordForm() {
             />
           </div>
 
-          <Button type="submit" className="w-full" loading={pending}>
+          <Button type="submit" className="w-full" loading={pending} disabled={!hydrated}>
             {pending ? 'Sending…' : 'Send reset link'}
           </Button>
 

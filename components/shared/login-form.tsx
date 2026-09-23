@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useIsHydrated } from '@/lib/hooks/use-is-hydrated';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AlertCircle } from 'lucide-react';
@@ -26,6 +27,7 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, setPending] = useState(false);
+  const hydrated = useIsHydrated();
   const [formError, setFormError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [values, setValues] = useState({ email: '', password: '' });
@@ -144,7 +146,7 @@ export function LoginForm() {
             ) : null}
           </div>
 
-          <Button type="submit" className="w-full" loading={pending}>
+          <Button type="submit" className="w-full" loading={pending} disabled={!hydrated}>
             {pending ? 'Signing in…' : 'Sign in'}
           </Button>
 

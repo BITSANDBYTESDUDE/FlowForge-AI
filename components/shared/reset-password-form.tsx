@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useIsHydrated } from '@/lib/hooks/use-is-hydrated';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle2, ShieldAlert } from 'lucide-react';
@@ -28,6 +29,7 @@ export function ResetPasswordForm() {
   const token = searchParams.get('token') ?? '';
 
   const [pending, setPending] = useState(false);
+  const hydrated = useIsHydrated();
   const [formError, setFormError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [values, setValues] = useState({ password: '', confirmPassword: '' });
@@ -185,7 +187,7 @@ export function ResetPasswordForm() {
             ) : null}
           </div>
 
-          <Button type="submit" className="w-full" loading={pending}>
+          <Button type="submit" className="w-full" loading={pending} disabled={!hydrated}>
             {pending ? 'Updating…' : 'Update password'}
           </Button>
         </form>
