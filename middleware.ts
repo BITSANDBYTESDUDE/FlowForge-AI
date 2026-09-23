@@ -15,8 +15,15 @@ import { getSessionCookie } from 'better-auth/cookies';
 /** Routes that require a session cookie. */
 const PROTECTED_PREFIXES = ['/dashboard', '/workflow'];
 
-/** Auth pages a signed-in user should be redirected away from. */
-const AUTH_PREFIXES = ['/login', '/register', '/forgot-password'];
+/**
+ * Auth pages a signed-in user should be redirected away from.
+ *
+ * `/reset-password` is included even though it carries a token: a user with an
+ * active session has no reason to set a password through it, and letting a
+ * signed-in visitor render the form invites confusion about which account is
+ * being changed.
+ */
+const AUTH_PREFIXES = ['/login', '/register', '/forgot-password', '/reset-password'];
 
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

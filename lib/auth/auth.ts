@@ -3,6 +3,8 @@ import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { nextCookies } from 'better-auth/next-js';
 import { getEnv } from '@/lib/env';
 import { getMongoDb } from '@/lib/db/connect';
+import { sendEmail } from '@/lib/notifications';
+import { logger } from '@/lib/utils/logger';
 
 /**
  * Better Auth owns credentials and sessions.
@@ -47,6 +49,32 @@ function buildOptions(withNextCookies: boolean): BetterAuthOptions {
       minPasswordLength: 10,
       maxPasswordLength: 128,
       autoSignIn: true,
+      /**
+       * Password reset.
+       *
+       * Better Auth generates the token and calls this to deliver it. The link
+       * points at our own `/reset-password` page rather than Better Auth's
+       * built-in endpoint, because that endpoint returns JSON — a user clicking
+       * it in an inbox needs a form, not a response body.
+       *
+       * `sendEmail` is currently a no-op placeholder (see lib/notifications), so
+       * in development the reset link is written to the server log instead of an
+       * inbox. The token, expiry and account invalidation are all real.
+       */
+      sendResetPassword: async ({ user, token }) => {
+        const url = `${env.NEXT_PUBLIC_APP_URL}/reset-password?token=${encodeURIComponent(token)}`;
+        await sendEmail({
+          to: user.email,
+          subject: 'Reset your FlowForge AI password',
+          body: `Use this link within 1 hour to choose a new password:\n\n${url}\n\nIf you did not request this, you can ignore this email.`,
+        });
+        if (env.NODE_ENV !== 'production') {
+          // Local development only, so the flow is testable without a mail
+          // provider. Never log a live reset token in production.
+          logger.info(`Password reset link for ${user.email}: ${url}`);
+        }
+      },
+      resetPasswordTokenExpiresIn: 60 * 60,
     },
     user: {
       additionalFields: {

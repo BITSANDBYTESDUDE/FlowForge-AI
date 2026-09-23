@@ -263,6 +263,45 @@ async function main(): Promise<void> {
   });
   check('audit log rejects writes (405)', auditPost.status === 405, auditPost.status);
 
+  /* --------------------------------------------------------- password reset */
+
+  console.log('\nPassword reset');
+  // Uses an account that no other section depends on, since a successful reset
+  // rotates the credential and would break later sign-ins.
+  const resetEmail = 'member@flowforge.dev';
+  const resetRequest = await fetch(`${BASE}/api/auth/forget-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: resetEmail, redirectTo: '/reset-password' }),
+  });
+  check('forget-password accepts a known address', resetRequest.status === 200, resetRequest.status);
+
+  // The response must not reveal whether the account exists. Better Auth returns
+  // the same shape either way; this asserts our endpoint does not leak a 404.
+  const unknownRequest = await fetch(`${BASE}/api/auth/forget-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'nobody-here@flowforge.dev', redirectTo: '/reset-password' }),
+  });
+  check(
+    'forget-password does not reveal unknown addresses',
+    unknownRequest.status === resetRequest.status,
+    unknownRequest.status,
+  );
+
+  const badReset = await fetch(`${BASE}/api/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newPassword: 'NotARealPass123', token: 'obviously-invalid-token' }),
+  });
+  check('reset-password rejects a forged token (400)', badReset.status === 400, badReset.status);
+
+  const forgotPage = await fetch(`${BASE}/forgot-password`);
+  check('forgot-password page renders', forgotPage.status === 200, forgotPage.status);
+
+  const resetPage = await fetch(`${BASE}/reset-password?token=placeholder`);
+  check('reset-password page renders', resetPage.status === 200, resetPage.status);
+
   /* -------------------------------------------------------------------- end */
 
   console.log(`\n${passed} passed, ${failed} failed`);

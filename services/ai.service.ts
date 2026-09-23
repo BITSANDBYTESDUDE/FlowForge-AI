@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getAiProvider, isAiConfigured, type AiProvider } from '@/lib/ai/provider';
+import { getEnv } from '@/lib/env';
 import { zodToStrictJsonSchema } from '@/lib/ai/json-schema';
 import {
   aiImprovementSchema,
@@ -282,7 +283,9 @@ function heuristicWorkflow(description: string): AiWorkflowOutput {
 /* ------------------------------------------------------------ Public API */
 
 export function allowHeuristicFallback(): boolean {
-  return process.env.AI_ALLOW_HEURISTIC_FALLBACK === 'true' && !isAiConfigured();
+  // Read through getEnv() rather than process.env so the flag is validated and
+  // defaulted like every other setting.
+  return getEnv().AI_ALLOW_HEURISTIC_FALLBACK && !isAiConfigured();
 }
 
 export async function generateWorkflow(description: string): Promise<AiCallResult<AiWorkflowOutput>> {
