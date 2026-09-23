@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { ReactFlowProvider } from '@xyflow/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -42,7 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { WorkflowCanvas } from '@/components/workflow/workflow-canvas';
+import { WorkflowCanvasInner } from '@/components/workflow/workflow-canvas';
 import { NodePalette } from '@/components/workflow/node-palette';
 import { PropertiesPanel } from '@/components/workflow/properties-panel';
 import { VersionHistoryPanel } from '@/components/workflow/version-history-panel';
@@ -95,7 +96,6 @@ export function WorkflowBuilder({
   useEffect(() => {
     setGraph({ nodes: initialWorkflow.nodes, edges: initialWorkflow.edges });
   }, [initialWorkflow.id, initialWorkflow.nodes, initialWorkflow.edges, setGraph]);
-
 
   const save = useMutation({
     mutationFn: async () => {
@@ -172,277 +172,256 @@ export function WorkflowBuilder({
   );
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
-      {/* ----------------------------------------------------------- toolbar */}
-      <header className="flex flex-wrap items-center gap-2 border-b bg-card/40 px-3 py-2">
-        <Button asChild variant="ghost" size="icon-sm" aria-label="Back to workflows">
-          <Link href={`/dashboard/workflows?workspace=${activeWorkspace?.id ?? ''}`}>
-            <ArrowLeft className="size-4" />
-          </Link>
-        </Button>
+    <ReactFlowProvider>
+      <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
+        {/* ----------------------------------------------------------- toolbar */}
+        <header className="flex flex-wrap items-center gap-2 border-b bg-card/40 px-3 py-2">
+          <Button asChild variant="ghost" size="icon-sm" aria-label="Back to workflows">
+            <Link href={`/dashboard/workflows?workspace=${activeWorkspace?.id ?? ''}`}>
+              <ArrowLeft className="size-4" />
+            </Link>
+          </Button>
 
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-sm font-semibold">{name}</p>
-          <Badge variant={workflow.status === 'ACTIVE' ? 'success' : 'muted'}>
-            {workflow.status.toLowerCase()}
-          </Badge>
-          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-            v{workflow.currentVersion}
-          </span>
-          {dirty ? (
-            <span className="shrink-0 text-[11px] text-warning-foreground dark:text-warning">
-              unsaved
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-sm font-semibold">{name}</p>
+            <Badge variant={workflow.status === 'ACTIVE' ? 'success' : 'muted'}>
+              {workflow.status.toLowerCase()}
+            </Badge>
+            <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+              v{workflow.currentVersion}
             </span>
-          ) : null}
-        </div>
-
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={undo}
-            disabled={historyLength === 0}
-            aria-label="Undo (Ctrl+Z)"
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo2 className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={redo}
-            disabled={futureLength === 0}
-            aria-label="Redo (Ctrl+Shift+Z)"
-            title="Redo (Ctrl+Shift+Z)"
-          >
-            <Redo2 className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              autoLayout();
-              toast.success('Layout applied');
-            }}
-            aria-label="Auto layout (L)"
-            title="Auto layout (L)"
-          >
-            <Layers className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => setNameDialogOpen(true)}
-            aria-label="Workflow settings"
-            title="Workflow settings"
-            disabled={!canEdit}
-          >
-            <Settings2 className="size-4" />
-          </Button>
-
-          <Separator orientation="vertical" className="mx-1 h-5" />
-
-          {canExecute && workflow.status === 'ACTIVE' ? (
-            <Button size="sm" variant="outline" onClick={() => setRunDialogOpen(true)}>
-              <Play className="size-3.5" />
-              Run
-            </Button>
-          ) : null}
-
-          {canEdit && workflow.status === 'DRAFT' ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setStatus.mutate('ACTIVE')}
-              loading={setStatus.isPending}
-            >
-              Publish
-            </Button>
-          ) : null}
-
-          {canEdit ? (
-            <Button
-              size="sm"
-              onClick={() => save.mutate()}
-              loading={save.isPending}
-              disabled={!dirty}
-              title="Save (Ctrl+S)"
-            >
-              {save.isPending ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                <>
-                  <Save className="size-3.5" />
-                  Save
-                </>
-              )}
-            </Button>
-          ) : null}
-        </div>
-      </header>
-
-      {!canEdit ? (
-        <p className="border-b bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
-          You have read-only access to this workflow. Editing requires the member role.
-        </p>
-      ) : null}
-
-      {/* ------------------------------------------------------ three columns */}
-      <div className="hidden flex-1 overflow-hidden lg:grid lg:grid-cols-[200px_1fr_300px]">
-        <aside className="overflow-y-auto border-r p-3">
-          <NodePalette />
-        </aside>
-
-        <div className="relative min-w-0 overflow-hidden">
-          <WorkflowCanvas />
-        </div>
-
-        <aside className="flex flex-col overflow-hidden border-l">
-          <Tabs defaultValue="properties" className="flex flex-1 flex-col overflow-hidden">
-            <TabsList className="mx-3 mt-3 grid grid-cols-3">
-              <TabsTrigger value="properties" className="text-xs">
-                Properties
-              </TabsTrigger>
-              <TabsTrigger value="ai" className="text-xs">
-                <Bot className="mr-1 size-3" />
-                AI
-              </TabsTrigger>
-              <TabsTrigger value="versions" className="text-xs">
-                <History className="mr-1 size-3" />
-                Versions
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="properties" className="flex-1 overflow-y-auto p-3">
-              {inspector}
-            </TabsContent>
-            <TabsContent value="ai" className="flex-1 overflow-y-auto p-3">
-              <AiAssistantPanel workflowId={workflowId} />
-            </TabsContent>
-            <TabsContent value="versions" className="flex-1 overflow-y-auto p-3">
-              <VersionHistoryPanel
-                workflowId={workflowId}
-                currentVersion={workflow.currentVersion}
-                onRestored={handleRestored}
-              />
-            </TabsContent>
-          </Tabs>
-        </aside>
-      </div>
-
-      {/* ------------------------------------------------- mobile fallback */}
-      <div className="flex flex-1 flex-col overflow-hidden lg:hidden">
-        <div className="h-[45dvh] border-b">
-          <WorkflowCanvas />
-        </div>
-        <Tabs
-          value={mobileTab}
-          onValueChange={setMobileTab}
-          className="flex flex-1 flex-col overflow-hidden"
-        >
-          <TabsList className="mx-3 mt-3 grid grid-cols-4">
-            <TabsTrigger value="palette" className="text-xs">
-              Add
-            </TabsTrigger>
-            <TabsTrigger value="properties" className="text-xs">
-              Edit
-            </TabsTrigger>
-            <TabsTrigger value="ai" className="text-xs">
-              AI
-            </TabsTrigger>
-            <TabsTrigger value="versions" className="text-xs">
-              History
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="palette" className="flex-1 overflow-y-auto p-3">
-            <NodePalette />
-          </TabsContent>
-          <TabsContent value="properties" className="flex-1 overflow-y-auto p-3">
-            {inspector}
-          </TabsContent>
-          <TabsContent value="ai" className="flex-1 overflow-y-auto p-3">
-            <AiAssistantPanel workflowId={workflowId} />
-          </TabsContent>
-          <TabsContent value="versions" className="flex-1 overflow-y-auto p-3">
-            <VersionHistoryPanel
-              workflowId={workflowId}
-              currentVersion={workflow.currentVersion}
-              onRestored={handleRestored}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      {/* ----------------------------------------------------- settings modal */}
-      <Dialog open={nameDialogOpen} onOpenChange={setNameDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Workflow settings</DialogTitle>
-            <DialogDescription>
-              Renaming creates a new version when you save. Status controls whether the workflow can
-              be executed.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="workflow-name">Name</Label>
-              <Input
-                id="workflow-name"
-                value={name}
-                maxLength={160}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="workflow-status">Status</Label>
-              <Select
-                value={workflow.status}
-                onValueChange={(value) => setStatus.mutate(value as WorkflowStatus)}
-              >
-                <SelectTrigger id="workflow-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DRAFT">Draft — not executable</SelectItem>
-                  <SelectItem value="ACTIVE">Active — can be executed</SelectItem>
-                  <SelectItem value="ARCHIVED">Archived — read-only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {nodes.length} steps · {edges.length} connections
-            </p>
+            {dirty ? (
+              <span className="shrink-0 text-[11px] text-warning-foreground dark:text-warning">
+                unsaved
+              </span>
+            ) : null}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setNameDialogOpen(false)}>
-              Close
+
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={undo}
+              disabled={historyLength === 0}
+              aria-label="Undo (Ctrl+Z)"
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo2 className="size-4" />
             </Button>
             <Button
-              onClick={() => {
-                setNameDialogOpen(false);
-                save.mutate();
-              }}
-              disabled={!dirty}
+              variant="ghost"
+              size="icon-sm"
+              onClick={redo}
+              disabled={futureLength === 0}
+              aria-label="Redo (Ctrl+Shift+Z)"
+              title="Redo (Ctrl+Shift+Z)"
             >
-              Save changes
+              <Redo2 className="size-4" />
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                autoLayout();
+                toast.success('Layout applied');
+              }}
+              aria-label="Auto layout (L)"
+              title="Auto layout (L)"
+            >
+              <Layers className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setNameDialogOpen(true)}
+              aria-label="Workflow settings"
+              title="Workflow settings"
+              disabled={!canEdit}
+            >
+              <Settings2 className="size-4" />
+            </Button>
 
-      <RunWorkflowDialog
-        open={runDialogOpen}
-        onOpenChange={setRunDialogOpen}
-        workflow={workflow}
-        onStarted={(executionId) => {
-          setRunDialogOpen(false);
-          router.push(`/workflow/${workflowId}/execution?execution=${executionId}&workspace=${activeWorkspace?.id ?? ''}`);
-        }}
-      />
-    </div>
+            <Separator orientation="vertical" className="mx-1 h-5" />
+
+            {canExecute && workflow.status === 'ACTIVE' ? (
+              <Button size="sm" variant="outline" onClick={() => setRunDialogOpen(true)}>
+                <Play className="size-3.5" />
+                Run
+              </Button>
+            ) : null}
+
+            {canEdit && workflow.status === 'DRAFT' ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setStatus.mutate('ACTIVE')}
+                loading={setStatus.isPending}
+              >
+                Publish
+              </Button>
+            ) : null}
+
+            {canEdit ? (
+              <Button
+                size="sm"
+                onClick={() => save.mutate()}
+                loading={save.isPending}
+                disabled={!dirty}
+                title="Save (Ctrl+S)"
+              >
+                {save.isPending ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <Save className="size-3.5" />
+                    Save
+                  </>
+                )}
+              </Button>
+            ) : null}
+          </div>
+        </header>
+
+        {!canEdit ? (
+          <p className="border-b bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+            You have read-only access to this workflow. Editing requires the member role.
+          </p>
+        ) : null}
+
+        {/* ------------------------------------------------------ three columns */}
+        {/*
+        One canvas serves both layouts. React Flow supports a single instance per
+        provider, so mounting a second canvas for narrow screens would have
+        duplicated the graph and left the palette bound to the wrong instance.
+        Instead the canvas stays mounted and the surrounding columns are hidden
+        with CSS: side-by-side on desktop, stacked with the canvas on top on
+        smaller screens.
+      */}
+        <div className="flex flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-[200px_1fr_300px]">
+          <aside className="hidden overflow-y-auto border-r p-3 lg:block">
+            <NodePalette />
+          </aside>
+
+          <div className="relative order-first h-[45dvh] min-w-0 overflow-hidden border-b lg:order-none lg:h-auto lg:border-b-0">
+            <WorkflowCanvasInner />
+          </div>
+
+          <aside className="flex flex-1 flex-col overflow-hidden lg:border-l">
+            <Tabs
+              value={mobileTab}
+              onValueChange={setMobileTab}
+              className="flex flex-1 flex-col overflow-hidden"
+            >
+              <TabsList className="mx-3 mt-3 grid grid-cols-4 lg:grid-cols-3">
+                <TabsTrigger value="palette" className="text-xs lg:hidden">
+                  Add
+                </TabsTrigger>
+                <TabsTrigger value="properties" className="text-xs">
+                  Properties
+                </TabsTrigger>
+                <TabsTrigger value="ai" className="text-xs">
+                  <Bot className="mr-1 size-3" />
+                  AI
+                </TabsTrigger>
+                <TabsTrigger value="versions" className="text-xs">
+                  <History className="mr-1 size-3" />
+                  Versions
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="palette" className="flex-1 overflow-y-auto p-3 lg:hidden">
+                <NodePalette />
+              </TabsContent>
+              <TabsContent value="properties" className="flex-1 overflow-y-auto p-3">
+                {inspector}
+              </TabsContent>
+              <TabsContent value="ai" className="flex-1 overflow-y-auto p-3">
+                <AiAssistantPanel workflowId={workflowId} />
+              </TabsContent>
+              <TabsContent value="versions" className="flex-1 overflow-y-auto p-3">
+                <VersionHistoryPanel
+                  workflowId={workflowId}
+                  currentVersion={workflow.currentVersion}
+                  onRestored={handleRestored}
+                />
+              </TabsContent>
+            </Tabs>
+          </aside>
+        </div>
+
+        {/* ----------------------------------------------------- settings modal */}
+        <Dialog open={nameDialogOpen} onOpenChange={setNameDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Workflow settings</DialogTitle>
+              <DialogDescription>
+                Renaming creates a new version when you save. Status controls whether the workflow
+                can be executed.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="workflow-name">Name</Label>
+                <Input
+                  id="workflow-name"
+                  value={name}
+                  maxLength={160}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="workflow-status">Status</Label>
+                <Select
+                  value={workflow.status}
+                  onValueChange={(value) => setStatus.mutate(value as WorkflowStatus)}
+                >
+                  <SelectTrigger id="workflow-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DRAFT">Draft — not executable</SelectItem>
+                    <SelectItem value="ACTIVE">Active — can be executed</SelectItem>
+                    <SelectItem value="ARCHIVED">Archived — read-only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {nodes.length} steps · {edges.length} connections
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setNameDialogOpen(false)}>
+                Close
+              </Button>
+              <Button
+                onClick={() => {
+                  setNameDialogOpen(false);
+                  save.mutate();
+                }}
+                disabled={!dirty}
+              >
+                Save changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <RunWorkflowDialog
+          open={runDialogOpen}
+          onOpenChange={setRunDialogOpen}
+          workflow={workflow}
+          onStarted={(executionId) => {
+            setRunDialogOpen(false);
+            router.push(
+              `/workflow/${workflowId}/execution?execution=${executionId}&workspace=${activeWorkspace?.id ?? ''}`,
+            );
+          }}
+        />
+      </div>
+    </ReactFlowProvider>
   );
 }
 

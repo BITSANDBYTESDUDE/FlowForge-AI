@@ -6,6 +6,8 @@ import { enforceRateLimit } from '@/lib/rate-limit';
 import { generateWorkflowSchema } from '@/schemas/ai.schema';
 import { createWorkflow } from '@/services/workflow.service';
 import { generateWorkflow } from '@/services/ai.service';
+import type { AiWorkflowOutput } from '@/lib/ai/schemas/workflow-output';
+import type { WorkflowGraphInput } from '@/schemas/workflow.schema';
 import { recordActivity } from '@/lib/notifications';
 
 /**
@@ -22,6 +24,45 @@ import { recordActivity } from '@/lib/notifications';
  * `dryRun: true` returns the validated graph without persisting it, so a user can
  * review a generated workflow before it appears in their workspace.
  */
+
+/**
+ * Converts model output into a graph the workflow service accepts.
+ *
+ * The model is never asked for edge ids — they carry no meaning to it, and
+ * constrained decoding would only be guessing at a format we control. It is the
+ * API's job to mint them.
+ *
+ * Both the dryRun draft and the persisted graph go through here on purpose. The
+ * draft is not a display-only artefact: the UI feeds it straight back into
+ * `POST /api/workflows` when the user saves, so a draft whose edges lack ids
+ * would be rejected by our own validation at save time. Building it once keeps
+ * the two paths from drifting.
+ */
+function toPersistableGraph(output: AiWorkflowOutput): WorkflowGraphInput {
+  return {
+    nodes: output.nodes.map((node) => ({
+      id: node.id,
+      type: node.type,
+      title: node.title,
+      description: node.description ?? '',
+      position: node.position,
+      assigneeId: null,
+      dueDate: null,
+      config: node.config ?? {},
+      metadata: { generated: true },
+    })),
+    edges: output.edges.map((edge, index) => ({
+      // Stable ids, derived from position and endpoints so the same graph
+      // serialises identically across requests.
+      id: `edge-${index}-${edge.source}-${edge.target}`,
+      source: edge.source,
+      target: edge.target,
+      condition: edge.condition ?? null,
+      label: edge.label ?? null,
+    })),
+  };
+}
+
 export const POST = withApiErrorHandling(async (request: NextRequest) => {
   const session = await requireApiSession(request);
   const input = await parseJsonBody(request, generateWorkflowSchema);
@@ -32,6 +73,7 @@ export const POST = withApiErrorHandling(async (request: NextRequest) => {
   // Throws AiUnavailableError / AiInvalidOutputError; `withApiErrorHandling`
   // maps both to the documented envelope.
   const result = await generateWorkflow(input.description);
+  const graph = toPersistableGraph(result.data);
 
   if (input.dryRun) {
     return ok({
@@ -39,8 +81,8 @@ export const POST = withApiErrorHandling(async (request: NextRequest) => {
         name: result.data.name,
         description: result.data.description,
         tags: result.data.tags,
-        nodes: result.data.nodes,
-        edges: result.data.edges,
+        nodes: graph.nodes,
+        edges: graph.edges,
       },
       meta: {
         model: result.usage.model,
@@ -56,28 +98,7 @@ export const POST = withApiErrorHandling(async (request: NextRequest) => {
     description: result.data.description,
     status: 'DRAFT',
     tags: result.data.tags,
-    graph: {
-      nodes: result.data.nodes.map((node) => ({
-        id: node.id,
-        type: node.type,
-        title: node.title,
-        description: node.description ?? '',
-        position: node.position,
-        assigneeId: null,
-        dueDate: null,
-        config: node.config ?? {},
-        metadata: { generated: true },
-      })),
-      edges: result.data.edges.map((edge, index) => ({
-        // The model is not asked for edge ids (they are meaningless to it), so
-        // stable ids are generated here for React Flow.
-        id: `edge-${index}-${edge.source}-${edge.target}`,
-        source: edge.source,
-        target: edge.target,
-        condition: edge.condition ?? null,
-        label: edge.label ?? null,
-      })),
-    },
+    graph,
   });
 
   await recordActivity({

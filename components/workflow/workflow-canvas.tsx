@@ -7,7 +7,6 @@ import {
   Controls,
   MiniMap,
   ReactFlow,
-  ReactFlowProvider,
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -19,9 +18,11 @@ import type { WorkflowNodeType } from '@/types/workflow';
 /**
  * React Flow canvas.
  *
- * `ReactFlowProvider` lives here (rather than in the page) because the palette
- * and toolbar both need `useReactFlow` to convert screen coordinates and drive
- * zoom, and they are siblings of the canvas.
+ * This renders the flow only — it does not create the `ReactFlowProvider`. The
+ * provider lives in `WorkflowBuilder` so that the palette, which is a sibling of
+ * the canvas rather than a child, can call `useReactFlow` to convert screen
+ * coordinates. React Flow also supports exactly one instance per provider, so
+ * the provider has to sit above the single canvas rather than inside it.
  */
 function Canvas() {
   const nodes = useBuilderStore((state) => state.nodes);
@@ -114,9 +115,7 @@ function CanvasWithShortcuts() {
       // Never intercept keys while the user is typing in a field.
       const target = event.target as HTMLElement | null;
       const typing =
-        target?.tagName === 'INPUT' ||
-        target?.tagName === 'TEXTAREA' ||
-        target?.isContentEditable;
+        target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
 
       const modifier = event.metaKey || event.ctrlKey;
 
@@ -146,11 +145,7 @@ function CanvasWithShortcuts() {
         return;
       }
 
-      if (
-        selectedNodeId &&
-        !modifier &&
-        (event.key === 'Backspace' || event.key === 'Delete')
-      ) {
+      if (selectedNodeId && !modifier && (event.key === 'Backspace' || event.key === 'Delete')) {
         event.preventDefault();
         deleteNode(selectedNodeId);
       }
@@ -158,15 +153,7 @@ function CanvasWithShortcuts() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [
-    undo,
-    redo,
-    duplicateNode,
-    deleteNode,
-    autoLayout,
-    fitView,
-    selectedNodeId,
-  ]);
+  }, [undo, redo, duplicateNode, deleteNode, autoLayout, fitView, selectedNodeId]);
 
   // Fit the graph once when it first arrives from the server.
   const fittedRef = useRef(false);
@@ -176,14 +163,15 @@ function CanvasWithShortcuts() {
     requestAnimationFrame(() => fitView({ padding: 0.25 }));
   }, [nodeCount, fitView]);
 
-
   return <Canvas />;
 }
 
-export function WorkflowCanvas() {
-  return (
-    <ReactFlowProvider>
-      <CanvasWithShortcuts />
-    </ReactFlowProvider>
-  );
+/**
+ * Canvas plus its keyboard shortcuts, without a provider.
+ *
+ * The builder owns the `ReactFlowProvider` so that the palette — a DOM sibling
+ * of the canvas — can call `useReactFlow` and share the same instance.
+ */
+export function WorkflowCanvasInner() {
+  return <CanvasWithShortcuts />;
 }
