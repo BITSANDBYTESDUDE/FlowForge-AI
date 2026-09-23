@@ -295,7 +295,27 @@ export type AiDraft = {
 
 export type AiImprovement = {
   summary: string;
-  suggestions: { type: string; title: string; detail: string; nodeId?: string }[];
+  suggestions: {
+    kind: 'MISSING_STEP' | 'UNNECESSARY_STEP' | 'BOTTLENECK' | 'UNCLEAR_DEPENDENCY' | 'IMPROVEMENT';
+    title: string;
+    detail: string;
+    nodeIds?: string[];
+    severity: 'LOW' | 'MEDIUM' | 'HIGH';
+  }[];
+};
+
+export type AiSummary = {
+  summary: string;
+  highlights: string[];
+  risks: string[];
+};
+
+export type AiTaskSuggestion = {
+  nodeId: string;
+  title: string;
+  description: string;
+  priority: TaskPriority;
+  estimatedDays?: number;
 };
 
 export const aiApi = {
@@ -317,14 +337,11 @@ export const aiApi = {
     persist?: boolean;
   }) =>
     api.post<{
-      suggestions?: { title: string; description: string; priority: TaskPriority; nodeId: string }[];
+      suggestions?: AiTaskSuggestion[];
       tasks?: TaskSummary[];
       dropped: number;
       meta: AiMeta;
     }>('/api/ai/generate-tasks', body),
   summarizeWorkflow: (body: { workspaceId: string; workflowId?: string; graph?: WorkflowGraph }) =>
-    api.post<{ summary: { summary: string; steps: string[]; risks: string[] }; meta: AiMeta }>(
-      '/api/ai/summarize-workflow',
-      body,
-    ),
+    api.post<{ summary: AiSummary; meta: AiMeta }>('/api/ai/summarize-workflow', body),
 };

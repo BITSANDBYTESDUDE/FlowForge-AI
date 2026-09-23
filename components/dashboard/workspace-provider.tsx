@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { workspacesApi } from '@/lib/api/endpoints';
 import type { WorkspaceRole, WorkspaceSummary } from '@/types/workspace';
@@ -44,17 +52,36 @@ export function WorkspaceProvider({
     queryFn: () => workspacesApi.list(),
   });
 
-  const workspaces = data?.workspaces ?? [];
+  // Memoised so the array identity is stable between renders; otherwise every
+  // `useMemo` below recomputes on each render and the dependency warnings are
+  // symptoms of that churn.
+  const workspaces = useMemo(() => data?.workspaces ?? [], [data]);
 
-  // Resolution order: an explicit selection, then the id from the URL, then the
-  // first workspace. Reading localStorage during render would break hydration,
-  // so the stored preference is applied in an effect below.
+  // The active workspace is expressed in the URL as `?workspace=<id>` so every
+  // page is linkable and a refresh keeps the selection. Window is read in an
+  // effect rather than during render because reading location at render time
+  // would produce different markup on the server and the client.
+  const [urlWorkspaceId, setUrlWorkspaceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('workspace');
+    const fromStorage = (() => {
+      try {
+        return window.localStorage.getItem(STORAGE_KEY);
+      } catch {
+        return null;
+      }
+    })();
+    setUrlWorkspaceId(fromUrl ?? fromStorage);
+  }, []);
+
   const activeWorkspaceId = useMemo(() => {
-    if (initialWorkspaceId && workspaces.some((w) => w.id === initialWorkspaceId)) {
-      return initialWorkspaceId;
+    const preferred = initialWorkspaceId ?? urlWorkspaceId ?? undefined;
+    if (preferred && workspaces.some((workspace) => workspace.id === preferred)) {
+      return preferred;
     }
     return workspaces[0]?.id ?? null;
-  }, [initialWorkspaceId, workspaces]);
+  }, [initialWorkspaceId, urlWorkspaceId, workspaces]);
 
   const activeWorkspace = useMemo(
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null,
