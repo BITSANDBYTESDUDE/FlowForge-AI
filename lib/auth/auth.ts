@@ -25,49 +25,73 @@ const resolveDatabase = (async (options: BetterAuthOptions) => {
   return mongodbAdapter(db)(options);
 }) as unknown as BetterAuthOptions['database'];
 
-export const auth = betterAuth({
-  appName: 'FlowForge AI',
-  baseURL: env.BETTER_AUTH_URL ?? env.NEXT_PUBLIC_APP_URL,
-  secret: env.AUTH_SECRET,
-  database: resolveDatabase,
-  emailAndPassword: {
-    enabled: true,
-    // Minimum 10 characters, plus a letter/digit requirement enforced in the
-    // registration schema. Better Auth hashes with scrypt and never stores
-    // plaintext.
-    minPasswordLength: 10,
-    maxPasswordLength: 128,
-    autoSignIn: true,
-  },
-  user: {
-    additionalFields: {
-      plan: {
-        type: 'string',
-        required: false,
-        defaultValue: 'FREE',
-        input: false,
+/**
+ * Builds the shared config.
+ *
+ * `withNextCookies` exists because the `nextCookies` plugin writes session
+ * cookies through Next's `cookies()` helper, which throws outside a request
+ * scope. That is correct for the app and wrong for scripts and background jobs —
+ * see `serverAuth` below.
+ */
+function buildOptions(withNextCookies: boolean): BetterAuthOptions {
+  return {
+    appName: 'FlowForge AI',
+    baseURL: env.BETTER_AUTH_URL ?? env.NEXT_PUBLIC_APP_URL,
+    secret: env.AUTH_SECRET,
+    database: resolveDatabase,
+    emailAndPassword: {
+      enabled: true,
+      // Minimum 10 characters, plus a letter/digit requirement enforced in the
+      // registration schema. Better Auth hashes with scrypt and never stores
+      // plaintext.
+      minPasswordLength: 10,
+      maxPasswordLength: 128,
+      autoSignIn: true,
+    },
+    user: {
+      additionalFields: {
+        plan: {
+          type: 'string',
+          required: false,
+          defaultValue: 'FREE',
+          input: false,
+        },
       },
     },
-  },
-  session: {
-    expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24,
-    cookieCache: {
-      enabled: true,
-      maxAge: 5 * 60,
+    session: {
+      expiresIn: 60 * 60 * 24 * 7,
+      updateAge: 60 * 60 * 24,
+      cookieCache: {
+        enabled: true,
+        maxAge: 5 * 60,
+      },
     },
-  },
-  advanced: {
-    useSecureCookies: env.NODE_ENV === 'production',
-    defaultCookieAttributes: {
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
+    advanced: {
+      useSecureCookies: env.NODE_ENV === 'production',
+      defaultCookieAttributes: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+      },
     },
-  },
-  // Must be last: it writes session cookies through Next's cookie store, which
-  // is required for server actions and route handlers to persist the session.
-  plugins: [nextCookies()],
-});
+    // Must be last when present: it writes session cookies through Next's
+    // cookie store, which route handlers and server actions require.
+    plugins: withNextCookies ? [nextCookies()] : [],
+  };
+}
+
+/** The app's auth instance. Used by route handlers and server components. */
+export const auth = betterAuth(buildOptions(true));
+
+/**
+ * Request-scope-free instance for scripts (seeding, migrations) and future
+ * background jobs.
+ *
+ * It talks to the same database and applies the same password hashing; it
+ * simply cannot set response cookies, because there is no response. Calling
+ * `auth.api.*` from a script would throw "cookies was called outside a request
+ * scope", so those callers should use this instance instead.
+ */
+export const serverAuth = betterAuth(buildOptions(false));
 
 export type AuthSession = typeof auth.$Infer.Session;
