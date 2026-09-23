@@ -7,20 +7,34 @@ import {
   LayoutDashboard,
   Layers,
   ListChecks,
+  ScrollText,
   Settings,
   Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { useWorkspace } from '@/components/dashboard/workspace-provider';
+import type { Permission } from '@/lib/permissions';
 
+/**
+ * `permission` gates visibility to what the current role can actually open. The
+ * audit log is admin-only, so showing it to every member would advertise a page
+ * that answers with a 403. This is a UI convenience — the API still enforces it.
+ */
 const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, exact: true },
-  { href: '/dashboard/workflows', label: 'Workflows', icon: Workflow, exact: false },
-  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, exact: false },
-  { href: '/dashboard/templates', label: 'Templates', icon: Layers, exact: false },
-  { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3, exact: false },
-  { href: '/dashboard/settings', label: 'Settings', icon: Settings, exact: false },
-] as const;
+  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard, exact: true, permission: null },
+  { href: '/dashboard/workflows', label: 'Workflows', icon: Workflow, exact: false, permission: null },
+  { href: '/dashboard/tasks', label: 'Tasks', icon: ListChecks, exact: false, permission: null },
+  { href: '/dashboard/templates', label: 'Templates', icon: Layers, exact: false, permission: null },
+  { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3, exact: false, permission: null },
+  { href: '/dashboard/audit', label: 'Audit log', icon: ScrollText, exact: false, permission: 'audit:read' },
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings, exact: false, permission: null },
+] as const satisfies ReadonlyArray<{
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact: boolean;
+  permission: Permission | null;
+}>;
 
 /**
  * Primary dashboard navigation.
@@ -30,15 +44,17 @@ const NAV_ITEMS = [
  */
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const { activeWorkspace } = useWorkspace();
+  const { activeWorkspace, can } = useWorkspace();
 
   function hrefFor(href: string) {
     return activeWorkspace ? `${href}?workspace=${activeWorkspace.id}` : href;
   }
 
+  const items = NAV_ITEMS.filter((item) => item.permission === null || can(item.permission));
+
   return (
     <nav aria-label="Dashboard" className="space-y-0.5">
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const active = item.exact
           ? pathname === item.href
           : pathname === item.href || pathname.startsWith(`${item.href}/`);

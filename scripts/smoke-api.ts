@@ -227,6 +227,42 @@ async function main(): Promise<void> {
   const versionList = data<{ versions: Array<unknown> }>(versions.body).versions;
   check('the seeded second version exists', versionList.length >= 2, versionList.length);
 
+  /* ------------------------------------------------------------------- audit */
+
+  console.log('\nAudit log');
+  const audit = await api(owner, `/api/audit?workspaceId=${workspaceId}`);
+  check('owner reads the audit log', audit.status === 200, audit.status);
+  const auditItems = data<{ items: Array<{ action: string }> }>(audit.body).items;
+  check('seeded audit entries exist', auditItems.length >= 1, auditItems.length);
+
+  const auditFiltered = await api(owner, `/api/audit?workspaceId=${workspaceId}&action=WORKFLOW_CREATED`);
+  check('audit action filter applies', auditFiltered.status === 200, auditFiltered.status);
+  const filteredItems = data<{ items: Array<{ action: string }> }>(auditFiltered.body).items;
+  check(
+    'filtered audit entries all match the action',
+    filteredItems.every((e) => e.action === 'WORKFLOW_CREATED'),
+    filteredItems.map((e) => e.action),
+  );
+
+  const adminAudit = await api(
+    { cookie: (await signIn('admin@flowforge.dev')).cookie },
+    `/api/audit?workspaceId=${workspaceId}`,
+  );
+  check('ADMIN can read the audit log', adminAudit.status === 200, adminAudit.status);
+
+  const memberAudit = await api(member, `/api/audit?workspaceId=${workspaceId}`);
+  check('MEMBER cannot read the audit log (403)', memberAudit.status === 403, memberAudit.status);
+
+  const viewerAudit = await api(viewer, `/api/audit?workspaceId=${workspaceId}`);
+  check('VIEWER cannot read the audit log (403)', viewerAudit.status === 403, viewerAudit.status);
+
+  // There is deliberately no write path — audit rows must be impossible to forge.
+  const auditPost = await api(owner, '/api/audit', {
+    method: 'POST',
+    body: JSON.stringify({ workspaceId, action: 'WORKFLOW_DELETED' }),
+  });
+  check('audit log rejects writes (405)', auditPost.status === 405, auditPost.status);
+
   /* -------------------------------------------------------------------- end */
 
   console.log(`\n${passed} passed, ${failed} failed`);
