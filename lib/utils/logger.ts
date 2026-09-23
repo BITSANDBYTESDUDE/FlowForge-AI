@@ -55,6 +55,7 @@ function emit(level: Level, message: string, context?: Record<string, unknown>):
   const line = JSON.stringify(payload);
   if (level === 'error') console.error(line);
   else if (level === 'warn') console.warn(line);
+  // eslint-disable-next-line no-console -- this is the logger's own sink
   else console.log(line);
 }
 
